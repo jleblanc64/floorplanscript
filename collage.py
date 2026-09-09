@@ -15,6 +15,10 @@ QUICK START
     # Or positionally (letters are assigned A, B, C, ... in order of first appearance):
     make_collage("AB/CC", ["a.jpg", "b.jpg", "c.jpg"]).save("out.png")
 
+    # Optional titles: title_top is drawn in red above, title_bottom below the pictures.
+    make_collage("AB/CC", ["a.jpg", "b.jpg", "c.jpg"],
+                 title_top="Ouverture mur atelier", title_bottom="Plan RDC").save("out.png")
+
 TEMPLATES (ASCII)
 -----------------
     "AB"          two side by side           "A/B"      two stacked
@@ -59,7 +63,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 
-from PIL import Image, ImageColor, ImageOps
+from PIL import Image, ImageColor, ImageDraw, ImageFont, ImageOps
 
 __all__ = [
     "Collage", "Row", "Col", "Img", "Blank", "Grid",
@@ -101,6 +105,28 @@ def _color(c, default="white") -> Tuple[int, int, int, int]:
     if isinstance(c, str):
         return ImageColor.getcolor(c, "RGBA")
     return tuple(c) if len(c) == 4 else (*c, 255)
+
+
+_FONT_CANDIDATES = [
+    "DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    "/Library/Fonts/Arial.ttf", "/System/Library/Fonts/Helvetica.ttc",
+    "C:/Windows/Fonts/arial.ttf",
+]
+
+
+def _font(size: int, path: Optional[str] = None) -> ImageFont.ImageFont:
+    """Best-effort TrueType font; falls back to Pillow's built-in font."""
+    for cand in ([path] if path else []) + _FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(cand, size)
+        except OSError:
+            continue
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:            # old Pillow: no size argument
+        return ImageFont.load_default()
 
 
 def fit_image(im: Image.Image, size: Tuple[int, int], fit: str = "cover",
@@ -362,21 +388,58 @@ class Collage:
     gap        : spacing between cells in px
     margin     : padding around the whole collage in px
     background : any Pillow color string / tuple, e.g. "white", "#222", (0,0,0,0) for transparent
+    title_top / title_bottom : optional text centered above / below the pictures.
+                 The top title is red, the bottom one dark grey (title_color_top/_bottom).
+    title_size : font size in px (default ~4% of the height); title_font : path to a .ttf
     """
 
     def __init__(self, layout: Node, size: Tuple[int, int] = (1920, 1080), gap: int = 10,
-                 margin: int = 0, background="white"):
+                 margin: int = 0, background="white",
+                 title_top: Optional[str] = None, title_bottom: Optional[str] = None,
+                 title_size: Optional[int] = None, title_font: Optional[str] = None,
+                 title_color_top="red", title_color_bottom="#222222"):
         self.layout = layout
         self.size = size
         self.gap = gap
         self.margin = margin
         self.background = background
+        self.title_top = title_top
+        self.title_bottom = title_bottom
+        self.title_size = title_size
+        self.title_font = title_font
+        self.title_color_top = title_color_top
+        self.title_color_bottom = title_color_bottom
+
+    def _draw_title(self, canvas, text, y_center, color, font):
+        draw = ImageDraw.Draw(canvas)
+        W = canvas.width
+        l, t, r, b = draw.textbbox((0, 0), text, font=font, align="center")
+        tw, th = r - l, b - t
+        draw.text(((W - tw) / 2 - l, y_center - th / 2 - t), text,
+                  font=font, fill=_color(color), align="center")
 
     def render(self) -> Image.Image:
         W, H = self.size
         canvas = Image.new("RGBA", (W, H), _color(self.background))
         m = self.margin
-        self.layout.render(canvas, (m, m, W - 2 * m, H - 2 * m), self)
+        top, bottom = m, H - m
+        if self.title_top or self.title_bottom:
+            fs = self.title_size or max(12, round(H * 0.04))
+            font = _font(fs, self.title_font)
+            band = round(fs * 1.6)
+            if self.title_top:
+                nlines = self.title_top.count("\n") + 1
+                bh = band + (nlines - 1) * round(fs * 1.2)
+                self._draw_title(canvas, self.title_top, top + bh / 2,
+                                 self.title_color_top, font)
+                top += bh
+            if self.title_bottom:
+                nlines = self.title_bottom.count("\n") + 1
+                bh = band + (nlines - 1) * round(fs * 1.2)
+                self._draw_title(canvas, self.title_bottom, bottom - bh / 2,
+                                 self.title_color_bottom, font)
+                bottom -= bh
+        self.layout.render(canvas, (m, top, W - 2 * m, bottom - top), self)
         return canvas
 
     def save(self, path, **kwargs) -> str:
@@ -398,8 +461,13 @@ def make_collage(template: str,
                  col_weights: Optional[Sequence[float]] = None,
                  row_weights: Optional[Sequence[float]] = None,
                  row_heights: Optional[Sequence[float]] = None,
-                 justify: bool = True) -> Collage:
+                 justify: bool = True,
+                 title_top: Optional[str] = None, title_bottom: Optional[str] = None,
+                 title_size: Optional[int] = None) -> Collage:
     """One-liner: build a Collage from an ASCII template and a dict/list of images.
+
+    title_top / title_bottom : text centered above (red) / below (dark grey) the pictures.
+    title_size : title font size in px (default ~4% of the collage height).
 
     row_heights : fraction of the height per row, e.g. [0.4, 0.6] (same as row_weights).
     justify : True (default) -> rows share the height (per row_heights) and each row is filled
@@ -416,7 +484,8 @@ def make_collage(template: str,
         else [wrap(v) for v in images]
     grid = Grid(template, cells, col_weights=col_weights, row_weights=row_weights,
                 row_heights=row_heights, justify=justify)
-    return Collage(grid, size=size, gap=gap, margin=margin, background=background)
+    return Collage(grid, size=size, gap=gap, margin=margin, background=background,
+                   title_top=title_top, title_bottom=title_bottom, title_size=title_size)
 
 
 # --------------------------------------------------------------------------- #
@@ -434,13 +503,16 @@ def _main(argv=None):
     p.add_argument("--background", default="white")
     p.add_argument("--fit", default="cover", choices=["cover", "contain", "stretch"])
     p.add_argument("--row-heights", default=None, help="comma list, e.g. 0.4,0.6")
+    p.add_argument("--title-top", default=None, help="red title above the pictures")
+    p.add_argument("--title-bottom", default=None, help="title below the pictures")
     p.add_argument("--no-justify", action="store_true", help="use a rigid equal-column grid")
     a = p.parse_args(argv)
     w, h = (int(v) for v in a.size.lower().split("x"))
     rh = [float(v) for v in a.row_heights.split(",")] if a.row_heights else None
     out = make_collage(a.template, a.images, size=(w, h), gap=a.gap, margin=a.margin,
                        background=a.background, fit=a.fit,
-                       row_heights=rh, justify=not a.no_justify).save(a.output)
+                       row_heights=rh, justify=not a.no_justify,
+                       title_top=a.title_top, title_bottom=a.title_bottom).save(a.output)
     print(f"wrote {out}")
 
 

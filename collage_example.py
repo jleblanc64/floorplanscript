@@ -34,6 +34,8 @@ def main():
         background="#e0e0e0",
         fit="stretch",
         row_heights=[0.5, 0.5],
+        title_top="Détails ouvertures",
+        title_bottom="Plan Sous-Sol",
     ).save(OUTPUT)
     print("wrote", OUTPUT)
 
