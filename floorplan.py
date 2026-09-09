@@ -57,7 +57,7 @@ OPENING_FILL = "#5b5f66" # dark grey block, like the sketch
 FLOOR_FILL = "#f4f5f8"
 TEXT_COLOR = "#1c2b4a"
 DIM_COLOR = "#1c2b4a"     # arrows and ticks
-DIM_TEXT_COLOR = "#c0392b"  # dimension labels (red, readable over hatching)
+DIM_TEXT_COLOR = "#ff0000"  # dimension labels (red, readable over hatching)
 LABEL_BOX = dict(boxstyle="round,pad=0.25", facecolor="white",
                  edgecolor="none", alpha=0.9)  # backing box behind labels
 FONT = "DejaVu Sans"
