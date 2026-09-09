@@ -21,6 +21,8 @@ CONVENTIONS (read this before generating calls)
 * Walls that touch/overlap are drawn as one continuous shape: outlines are
   only drawn where they're not inside another wall. Overlapping is fine,
   but don't draw the exact same wall twice.
+* All text sizes are multiplied by the module global FONT_SIZE_MULTIPLIER
+  (default 1). Set it before drawing: `floorplan.FONT_SIZE_MULTIPLIER = 1.5`.
 
 MINIMAL EXAMPLE
 ---------------
@@ -45,6 +47,7 @@ from matplotlib.patches import Rectangle, Arc, Polygon
 # --------------------------------------------------------------------------- #
 # Style
 # --------------------------------------------------------------------------- #
+FONT_SIZE_MULTIPLIER = 2  # scales every text size in the drawing (1 = default)
 WALL_THICKNESS = 20      # default wall thickness (cm)
 WALL_FILL = "#e9ecf2"    # light fill behind the hatch
 WALL_HATCH = "///"       # matplotlib hatch pattern
@@ -58,6 +61,11 @@ DIM_TEXT_COLOR = "#c0392b"  # dimension labels (red, readable over hatching)
 LABEL_BOX = dict(boxstyle="round,pad=0.25", facecolor="white",
                  edgecolor="none", alpha=0.9)  # backing box behind labels
 FONT = "DejaVu Sans"
+
+
+def _fs(size: float) -> float:
+    """Apply the global font multiplier to a base font size."""
+    return size * FONT_SIZE_MULTIPLIER
 
 
 class FloorPlan:
@@ -79,7 +87,8 @@ class FloorPlan:
         self.ax.axis("off")
         self.fig.patch.set_facecolor("white")
         if title:
-            self.ax.set_title(title, fontsize=12, color=TEXT_COLOR, fontname=FONT)
+            self.ax.set_title(title, fontsize=_fs(12), color=TEXT_COLOR,
+                              fontname=FONT)
 
     # ------------------------------------------------------------------ #
     # Internal helpers
@@ -111,7 +120,6 @@ class FloorPlan:
         do not lie inside/on another wall, so junctions have no seams."""
         if not self._walls:
             return
-        eps = 1e-6
         rects = [(rx, ry, rx + w, ry + h) for rx, ry, w, h in self._walls]
 
         # 1) fills + hatch, no visible edge (edgecolor still drives hatch color)
@@ -244,8 +252,9 @@ class FloorPlan:
              size: float = 9, bold: bool = False, ha: str = "center",
              va: str = "center", color: str = TEXT_COLOR, boxed: bool = False):
         """Free text centered at (x, y). rotation=90 for vertical text.
-        boxed=True adds a white backing box (use when text sits on a wall)."""
-        self.ax.text(x, y, text, rotation=rotation, fontsize=size,
+        boxed=True adds a white backing box (use when text sits on a wall).
+        `size` is multiplied by FONT_SIZE_MULTIPLIER."""
+        self.ax.text(x, y, text, rotation=rotation, fontsize=_fs(size),
                      fontname=FONT, color=color, ha=ha, va=va,
                      fontweight="bold" if bold else "normal",
                      bbox=LABEL_BOX if boxed else None, zorder=6)
@@ -264,6 +273,7 @@ class FloorPlan:
         Starts at (x, y) and spans `length` to the right / upward.
         offset : perpendicular shift (+ = up for horizontal, + = right for vertical).
         label  : text; defaults to f"{length:g} {unit}". Use "" for no label.
+        size   : label font size (multiplied by FONT_SIZE_MULTIPLIER).
         flip_label : put the label on the other side of the arrow
                      (below instead of above / right instead of left).
         """
@@ -283,8 +293,8 @@ class FloorPlan:
                 ly, va = ((yy - tick - 2, "top") if flip_label
                           else (yy + tick + 2, "bottom"))
                 self.ax.text((x1 + x2) / 2, ly, label, ha="center", va=va,
-                             fontsize=size, fontname=FONT, color=DIM_TEXT_COLOR,
-                             bbox=LABEL_BOX, zorder=6)
+                             fontsize=_fs(size), fontname=FONT,
+                             color=DIM_TEXT_COLOR, bbox=LABEL_BOX, zorder=6)
             self._track(x1, yy - tick, x2, yy + tick + 12)
         else:
             xx = x + offset
@@ -299,8 +309,8 @@ class FloorPlan:
                 lx, ha = ((xx + tick + 2, "left") if flip_label
                           else (xx - tick - 2, "right"))
                 self.ax.text(lx, (y1 + y2) / 2, label, ha=ha, va="center",
-                             fontsize=size, fontname=FONT, color=DIM_TEXT_COLOR,
-                             bbox=LABEL_BOX, zorder=6)
+                             fontsize=_fs(size), fontname=FONT,
+                             color=DIM_TEXT_COLOR, bbox=LABEL_BOX, zorder=6)
             self._track(xx - tick - 40, y1, xx + tick, y2)
         return self
 
