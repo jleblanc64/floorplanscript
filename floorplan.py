@@ -120,44 +120,37 @@ class FloorPlan:
                                         facecolor=WALL_FILL, edgecolor=WALL_EDGE,
                                         hatch=WALL_HATCH, linewidth=0, zorder=2))
 
-        # 2) outline segments minus the parts covered by other walls
-        def covered(a, b, lo, hi):
-            """Subtract closed interval [lo, hi] from [a, b]; return remaining."""
-            out = []
-            if hi <= a + eps or lo >= b - eps:
-                return [(a, b)]
-            if lo > a + eps:
-                out.append((a, lo))
-            if hi < b - eps:
-                out.append((hi, b))
-            return out
+        # 2) outline: a piece of a wall edge is drawn only if exactly one of
+        #    its two sides is inside some wall (true boundary of the union)
+        d = 1e-3
 
-        for i, (x0, y0, x1, y1) in enumerate(rects):
-            edges = [  # (fixed_axis, fixed_value, a, b) — 'y' = horizontal edge
-                ("y", y0, x0, x1), ("y", y1, x0, x1),
-                ("x", x0, y0, y1), ("x", x1, y0, y1)]
-            for axis, c, a, b in edges:
-                segs = [(a, b)]
-                for j, (ox0, oy0, ox1, oy1) in enumerate(rects):
-                    if j == i:
-                        continue
-                    if axis == "y":
-                        if oy0 - eps <= c <= oy1 + eps:
-                            segs = [p for s_ in segs for p in covered(*s_, ox0, ox1)]
-                    else:
-                        if ox0 - eps <= c <= ox1 + eps:
-                            segs = [p for s_ in segs for p in covered(*s_, oy0, oy1)]
-                for a2, b2 in segs:
-                    if b2 - a2 <= eps:
-                        continue
-                    if axis == "y":
-                        self.ax.plot([a2, b2], [c, c], color=WALL_EDGE,
-                                     linewidth=WALL_EDGE_WIDTH, solid_capstyle="projecting",
-                                     zorder=2.5)
-                    else:
-                        self.ax.plot([c, c], [a2, b2], color=WALL_EDGE,
-                                     linewidth=WALL_EDGE_WIDTH, solid_capstyle="projecting",
-                                     zorder=2.5)
+        def inside(px, py):
+            return any(x0 < px < x1 and y0 < py < y1 for x0, y0, x1, y1 in rects)
+
+        def draw(axis, c, a, b):
+            cuts = {a, b}
+            for x0, y0, x1, y1 in rects:
+                for v in ((x0, x1) if axis == "y" else (y0, y1)):
+                    if a < v < b:
+                        cuts.add(v)
+            cuts = sorted(cuts)
+            for a2, b2 in zip(cuts, cuts[1:]):
+                m = (a2 + b2) / 2
+                if axis == "y":
+                    one, two = inside(m, c + d), inside(m, c - d)
+                    xs, ys = [a2, b2], [c, c]
+                else:
+                    one, two = inside(c + d, m), inside(c - d, m)
+                    xs, ys = [c, c], [a2, b2]
+                if one != two:
+                    self.ax.plot(xs, ys, color=WALL_EDGE, linewidth=WALL_EDGE_WIDTH,
+                                 solid_capstyle="projecting", zorder=2.5)
+
+        for x0, y0, x1, y1 in rects:
+            draw("y", y0, x0, x1)
+            draw("y", y1, x0, x1)
+            draw("x", x0, y0, y1)
+            draw("x", x1, y0, y1)
 
     def opening(self, x: float, y: float, length: float, horizontal: bool = True,
                 thickness: float = WALL_THICKNESS):
