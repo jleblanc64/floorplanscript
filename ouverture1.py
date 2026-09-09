@@ -1,8 +1,10 @@
 import os
 
+import floorplan
 from floorplan import FloorPlan
 
 NAME = "~/Pictures/ouverture1.png"
+floorplan.FONT_SIZE_MULTIPLIER = 2.5
 
 # reproduces the "Couloir / Salle de jeux / Salle de bains" sketch.
 # Only 23 (wall thickness), 40, 63 and 80 are given; other sizes are assumed.

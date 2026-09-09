@@ -22,7 +22,7 @@ def main():
     A = folder / "ouverture1.png"
     B = folder / "ouverture2.png"
     C = folder / "SS.jpeg"
-    OUTPUT = folder / "collage_out.png"
+    OUTPUT = folder / "plan_ouvertures.png"
 
     # ---- template derived from the picture ----
     make_collage(
