@@ -13,6 +13,18 @@ from floorplan import FloorPlan
 
 floorplan.FONT_SIZE_MULTIPLIER = 1.3
 
+# Measurement style (opt-in; without these lines the library's
+# original thin dark-blue style is used)
+floorplan.DIM_COLOR = "#0a7d32"      # strong green: visible on the blue hatch, distinct from the red opening
+floorplan.DIM_TEXT_COLOR = "#0a7d32"
+floorplan.DIM_LINE_WIDTH = 2.2       # thicker arrow line
+floorplan.DIM_ARROW_STYLE = "<|-|>"  # filled arrowheads
+floorplan.DIM_HEAD = 14
+floorplan.DIM_HALO = 4               # white outline so lines read over hatching
+floorplan.DIM_TICK = 10              # longer end ticks
+floorplan.DIM_EXTENSION = True       # lines from measured points to the arrow
+floorplan.DIM_TEXT_BOLD = True
+
 NAME = "~/Pictures/ouverture_cuisine.png"
 
 # ---- values from the sketch -------------------------------------------
@@ -37,7 +49,7 @@ open_top = SILL + OPEN_H
 end_x = open_r + RIGHT_W
 
 p = FloorPlan(title="Mur intérieur cuisine étage: nouvelle ouverture")
-p.ax.title.set_color(floorplan.DIM_TEXT_COLOR)   # red title
+p.ax.title.set_color("#d40000")                 # red title
 
 # Wall surface, built around the door and the opening
 p.wall(0, 0, CEILING, horizontal=False, thickness=LEFT_W)                # left of door
@@ -60,10 +72,10 @@ p.text(door_x + DOOR_W / 2, DOOR_H / 2, "PORTE\nvers salon", size=10, bold=True)
 p.line(-20, 0, end_x + 20, 0, width=2.5)
 
 # Dimensions from the sketch
-p.dimension(door_r, SILL, GAP, horizontal=True)                 # 62, at sill level
-p.dimension(open_x, open_top, OPEN_W, horizontal=True, offset=12)  # 105
-p.dimension(open_r, 0, SILL, horizontal=False, offset=25, flip_label=True)       # 90
-p.dimension(open_r, SILL, OPEN_H, horizontal=False, offset=25, flip_label=True)  # 110
+p.dimension(door_r, SILL, GAP, horizontal=True)                     # 62, at sill level
+p.dimension(open_x, open_top, OPEN_W, horizontal=True, offset=15)   # 105
+p.dimension(open_r, 0, SILL, horizontal=False, offset=30, flip_label=True)       # 90
+p.dimension(open_r, SILL, OPEN_H, horizontal=False, offset=30, flip_label=True)  # 110
 
 # Terrace direction
 p.text(end_x - 55, 170, "terrasse  →", size=10, boxed=True)

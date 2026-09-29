@@ -17,12 +17,15 @@ CONVENTIONS (read this before generating calls)
 * Dimensions are double-headed arrows with end ticks. They measure a length
   starting at (x, y) going right (horizontal) or up (vertical). `offset` shifts
   the arrow sideways so it sits beside the thing it measures.
+  Their look is set by the DIM_* globals (defaults = original thin style);
+  optional white halo and extension lines improve readability over hatching.
 * Text default: centered, horizontal. Use rotation=90 for vertical labels.
 * Walls that touch/overlap are drawn as one continuous shape: outlines are
   only drawn where they're not inside another wall. Overlapping is fine,
   but don't draw the exact same wall twice.
 * All text sizes are multiplied by the module global FONT_SIZE_MULTIPLIER
   (default 1). Set it before drawing: `floorplan.FONT_SIZE_MULTIPLIER = 1.5`.
+  The DIM_* globals below can be changed the same way.
 
 MINIMAL EXAMPLE
 ---------------
@@ -42,12 +45,13 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 from matplotlib.patches import Rectangle, Arc, Polygon
 
 # --------------------------------------------------------------------------- #
 # Style
 # --------------------------------------------------------------------------- #
-FONT_SIZE_MULTIPLIER = 2  # scales every text size in the drawing (1 = default)
+FONT_SIZE_MULTIPLIER = 1  # scales every text size in the drawing (1 = default)
 WALL_THICKNESS = 20      # default wall thickness (cm)
 WALL_FILL = "#e9ecf2"    # light fill behind the hatch
 WALL_HATCH = "///"       # matplotlib hatch pattern
@@ -56,16 +60,38 @@ WALL_EDGE_WIDTH = 1.6
 OPENING_FILL = "#ff0000"
 FLOOR_FILL = "#f4f5f8"
 TEXT_COLOR = "#1c2b4a"
-DIM_COLOR = "#1c2b4a"     # arrows and ticks
-DIM_TEXT_COLOR = "#ff0000"  # dimension labels (red, readable over hatching)
+FONT = "DejaVu Sans"
+
+# Dimensions (read at call time, so a script can override them).
+# Defaults reproduce the ORIGINAL look (thin dark-blue arrows, red labels),
+# so existing scripts render exactly as before. Override to opt in, e.g.:
+#   floorplan.DIM_COLOR = "#0a7d32"; floorplan.DIM_LINE_WIDTH = 2.2
+#   floorplan.DIM_HALO = 4; floorplan.DIM_EXTENSION = True
+DIM_COLOR = "#1c2b4a"       # arrows, ticks, extension lines
+DIM_TEXT_COLOR = "#ff0000"  # dimension labels
+DIM_LINE_WIDTH = 1.0        # main arrow line (points)
+DIM_TICK = 6                # half-length of end ticks (cm)
+DIM_ARROW_STYLE = "<->"     # "<|-|>" gives filled arrowheads
+DIM_HEAD = None             # arrowhead size (mutation_scale); None = matplotlib default
+DIM_HALO = 0                # white outline around dimension lines (points, 0 = off)
+DIM_EXTENSION = False       # draw extension lines when offset != 0
+DIM_EXT_WIDTH = 1.0         # extension line width (points)
+DIM_TEXT_BOLD = False
+
 LABEL_BOX = dict(boxstyle="round,pad=0.25", facecolor="white",
                  edgecolor="none", alpha=0.9)  # backing box behind labels
-FONT = "DejaVu Sans"
 
 
 def _fs(size: float) -> float:
     """Apply the global font multiplier to a base font size."""
     return size * FONT_SIZE_MULTIPLIER
+
+
+def _halo(lw: float):
+    """White stroke behind a line so it stands out over hatching."""
+    if DIM_HALO <= 0:
+        return []
+    return [pe.withStroke(linewidth=lw + DIM_HALO, foreground="white")]
 
 
 class FloorPlan:
@@ -265,9 +291,14 @@ class FloorPlan:
         """Larger label for a room name."""
         return self.text(x, y, name, rotation=rotation, size=13)
 
+    def _dim_line(self, xs, ys, lw, z=5):
+        self.ax.plot(xs, ys, color=DIM_COLOR, lw=lw, zorder=z,
+                     path_effects=_halo(lw))
+
     def dimension(self, x: float, y: float, length: float, horizontal: bool = True,
                   offset: float = 0, label: str | None = None,
-                  unit: str = "cm", size: float = 8, flip_label: bool = False):
+                  unit: str = "cm", size: float = 8, flip_label: bool = False,
+                  extension: bool | None = None):
         """
         Double-headed measurement arrow with end ticks.
         Starts at (x, y) and spans `length` to the right / upward.
@@ -276,42 +307,62 @@ class FloorPlan:
         size   : label font size (multiplied by FONT_SIZE_MULTIPLIER).
         flip_label : put the label on the other side of the arrow
                      (below instead of above / right instead of left).
+        extension  : when offset != 0, draw thin lines from the measured
+                     points to the arrow. None = use DIM_EXTENSION.
+        Line style comes from the DIM_* module globals.
         """
         if label is None:
             label = f"{length:g} {unit}"
-        tick = 6
+        tick = DIM_TICK
+        lw = DIM_LINE_WIDTH
+        arrow = dict(arrowstyle=DIM_ARROW_STYLE, color=DIM_COLOR, lw=lw,
+                     shrinkA=0, shrinkB=0)
+        if DIM_HEAD is not None:
+            arrow["mutation_scale"] = DIM_HEAD
+        if DIM_HALO > 0:
+            arrow["path_effects"] = _halo(lw)
+        text_kw = dict(fontsize=_fs(size), fontname=FONT, color=DIM_TEXT_COLOR,
+                       fontweight="bold" if DIM_TEXT_BOLD else "normal",
+                       bbox=LABEL_BOX, zorder=6)
+        if extension is None:
+            extension = DIM_EXTENSION
+        ext = extension and abs(offset) > 1e-9
+        s = 1 if offset > 0 else -1   # direction from measured points to arrow
+
         if horizontal:
             yy = y + offset
             x1, x2 = x, x + length
+            if ext:   # extension lines, slightly overshooting the arrow
+                for xx in (x1, x2):
+                    self._dim_line([xx, xx], [y, yy + s * tick], DIM_EXT_WIDTH, z=4.9)
             self.ax.annotate("", xy=(x2, yy), xytext=(x1, yy),
-                             arrowprops=dict(arrowstyle="<->", color=DIM_COLOR,
-                                             lw=1, shrinkA=0, shrinkB=0), zorder=5)
+                             arrowprops=arrow, zorder=5)
             for xx in (x1, x2):
-                self.ax.plot([xx, xx], [yy - tick, yy + tick], color=DIM_COLOR,
-                             lw=1, zorder=5)
+                self._dim_line([xx, xx], [yy - tick, yy + tick], lw)
             if label:
                 ly, va = ((yy - tick - 2, "top") if flip_label
                           else (yy + tick + 2, "bottom"))
-                self.ax.text((x1 + x2) / 2, ly, label, ha="center", va=va,
-                             fontsize=_fs(size), fontname=FONT,
-                             color=DIM_TEXT_COLOR, bbox=LABEL_BOX, zorder=6)
+                self.ax.text((x1 + x2) / 2, ly, label, ha="center", va=va, **text_kw)
             self._track(x1, yy - tick, x2, yy + tick + 12)
+            if ext:
+                self._track(x1, y, x2, y)
         else:
             xx = x + offset
             y1, y2 = y, y + length
+            if ext:
+                for yy in (y1, y2):
+                    self._dim_line([x, xx + s * tick], [yy, yy], DIM_EXT_WIDTH, z=4.9)
             self.ax.annotate("", xy=(xx, y2), xytext=(xx, y1),
-                             arrowprops=dict(arrowstyle="<->", color=DIM_COLOR,
-                                             lw=1, shrinkA=0, shrinkB=0), zorder=5)
+                             arrowprops=arrow, zorder=5)
             for yy in (y1, y2):
-                self.ax.plot([xx - tick, xx + tick], [yy, yy], color=DIM_COLOR,
-                             lw=1, zorder=5)
+                self._dim_line([xx - tick, xx + tick], [yy, yy], lw)
             if label:
                 lx, ha = ((xx + tick + 2, "left") if flip_label
                           else (xx - tick - 2, "right"))
-                self.ax.text(lx, (y1 + y2) / 2, label, ha=ha, va="center",
-                             fontsize=_fs(size), fontname=FONT,
-                             color=DIM_TEXT_COLOR, bbox=LABEL_BOX, zorder=6)
+                self.ax.text(lx, (y1 + y2) / 2, label, ha=ha, va="center", **text_kw)
             self._track(xx - tick - 40, y1, xx + tick, y2)
+            if ext:
+                self._track(x, y1, x, y2)
         return self
 
     def line(self, x0: float, y0: float, x1: float, y1: float,
